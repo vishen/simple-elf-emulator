@@ -1,0 +1,4 @@
+- Create virtualmachine that loads data from all elf readable sections (excluding elf header) and map Vaddrs so they can be accessed.
+- Add registers mapping for virtualmachine; rax, rbx etc
+- Add basic syscalls
+- Add instruction types for memory access
