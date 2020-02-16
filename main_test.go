@@ -11,6 +11,13 @@ type testCase struct {
 	expected string
 }
 
+func TestBinaryFromBytes(t *testing.T) {
+	b := (&Decoder{}).binaryFromBytes([]byte{0xef, 0xbe, 0xad, 0xde})
+	if b != uint64(0xdeadbeef) {
+		t.Fatalf("0x%x != 0xdeadbeef", b)
+	}
+}
+
 func TestAdd(t *testing.T) {
 	tcs := []testCase{
 		{[]byte{0x48, 0x83, 0xc0, 0x01}, "ADD rax, 0x01\n"},

@@ -1,4 +1,5 @@
-- Create virtualmachine that loads data from all elf readable sections (excluding elf header) and map Vaddrs so they can be accessed.
-- Add registers mapping for virtualmachine; rax, rbx etc
-- Add basic syscalls
-- Add instruction types for memory access
+- be able to move from a memory location
+- fix tests
+- add mnemonic handling for ADD, INC, DEC
+- add other syscalls? Only SYS_WRITE and SYS_EXIT handled currently
+- SYS_WRITE: should also use stderr
