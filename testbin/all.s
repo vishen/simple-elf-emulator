@@ -4,6 +4,7 @@ section .text
 _start:
 
 mov rbx, [msg]
+mov rax, [msg]
 add rbx, 1
 mov [msg], rbx
 

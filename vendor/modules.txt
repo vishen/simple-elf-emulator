@@ -1,0 +1,2 @@
+# golang.org/x/arch v0.0.0-20191126211547-368ea8f32fff
+golang.org/x/arch/x86/x86asm

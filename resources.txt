@@ -1,0 +1,4 @@
+- https://reverseengineering.stackexchange.com/questions/3671/i-need-quick-correction-on-this-x86-opcode-conundrum
+- https://www.systutorials.com/beginners-guide-x86-64-instruction-encoding/
+- https://wiki.osdev.org/X86-64_Instruction_Encoding
+- https://defuse.ca/online-x86-assembler.htm#disassembly

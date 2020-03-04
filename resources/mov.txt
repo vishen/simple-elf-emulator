@@ -1,0 +1,30 @@
+# Mov 
+- https://www.felixcloutier.com/x86/mov
+
+## Mov Instruction Encoding
+MOV r/m64,r64 (Move r64 to r/m64)
+	REX.W + 89 /r
+	MR
+	
+MOV r64,r/m64 (Move r/m64 to r64.)
+	REX.W + 8B /r
+	RM
+
+MOV r64, imm64 (Move imm64 to r64.)
+	REX.W + B8+ rd io
+	OI
+
+
+### Instruction Operand Encoding
+Op/En	Operand 1	Operand 2
+MR	ModRM:r/m (w)	ModRM:reg (r)
+RM	ModRM:reg (w)	ModRM:r/m (r)
+OI	opcode + rd (w)	imm8/16/32/64
+
+
+
+## Ignore
+
+mov rax, rbx -> 0x48 0x89 0xd8
+
+mov rax, [msg] -> 0x48 0x89 0x04 0x25 0xmsgaddress

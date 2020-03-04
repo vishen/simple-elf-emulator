@@ -10,6 +10,13 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
+
+	"golang.org/x/arch/x86/x86asm"
+)
+
+var (
+	showInstructions = true
+	runInstructions  = false
 )
 
 type OpCodeType int
@@ -18,6 +25,8 @@ const (
 	ImmToReg OpCodeType = iota
 	ImmToRegModRM
 	RegToReg
+	DataToReg
+	RegToData
 )
 
 type Inst int
@@ -48,7 +57,7 @@ type OpCode struct {
 	RegCode   byte
 	Type      OpCodeType
 	Inst      Inst
-	UsesModRM bool
+	UsesModRM bool // wtf does this do / mean?
 	Size      int
 }
 
@@ -58,10 +67,12 @@ func (o OpCode) String() string {
 
 var opCodes = []OpCode{
 	{0xb8, 0, ImmToReg, Mov, false, 0},
-	{0x89, 0, RegToReg, Mov, true, 0},
+	{0x89, 0x03, RegToReg, Mov, true, 0},
+	{0x89, 0, RegToData, Mov, true, 0},
+	{0x8b, 0, DataToReg, Mov, true, 4},
 	{0x83, 0, ImmToRegModRM, Add, true, 1},
 	{0x81, 0, ImmToRegModRM, Xor, true, 4},
-	{0x83, 0x6, ImmToRegModRM, Xor, true, 1},
+	{0x83, 0x06, ImmToRegModRM, Xor, true, 1},
 	{0x31, 0, RegToReg, Xor, true, 0},
 }
 
@@ -87,6 +98,14 @@ func findOpCode(b, reg byte) (OpCode, error) {
 		// identifying byte, assume the next byte is a 'modrm' byte and
 		// check against that.
 		//
+		// If we don't find a match with regCode, check for any
+		// exact matches for actual opcode.
+		// TODO: again, unsure if this is correct.
+		for _, o := range foundOpCodes {
+			if o.Code == b {
+				return o, nil
+			}
+		}
 		// TODO: I am exceptionally unsure if this will return the
 		// correct result...
 		mostLikelyOpCode := foundOpCodes[0]
@@ -166,6 +185,7 @@ type IR struct {
 	regSrc        Register
 	regDst        Register
 	imm           uint64
+	dataIndex     uint64
 	indexPosition int
 }
 
@@ -174,7 +194,16 @@ func (ir IR) String() string {
 	if ir.regDst != RUnknown && ir.regSrc != RUnknown {
 		s += fmt.Sprintf(" %s, %s", ir.regDst, ir.regSrc)
 	} else if ir.regDst != RUnknown && ir.regSrc == RUnknown {
-		s += fmt.Sprintf(" %s, 0x%x", ir.regDst, ir.imm)
+		// TODO: This is very hacky since it assumes the dataIndex
+		// will never be zero, which is just false. Possibly use
+		// the opcode type to format an instruction more
+		// concretely.
+		if ir.dataIndex > 0 {
+			s += fmt.Sprintf(" %s, ds:0x%x", ir.regDst, ir.dataIndex)
+		} else {
+
+			s += fmt.Sprintf(" %s, 0x%x", ir.regDst, ir.imm)
+		}
 	}
 	return s
 }
@@ -325,47 +354,51 @@ func (ps *programState) getData(index, length uint64) []byte {
 }
 
 func (p *Program) run() {
-	for _, d := range p.dataSections {
-		// TODO: For now just don't print the elf header. It could be
-		// possible that data is in the elf header and should be printed out,
-		// but I have no idea how to handle this at the moment.
-		if d.isElfHeader {
-			continue
+	if showInstructions {
+		for _, d := range p.dataSections {
+			// TODO: For now just don't print the elf header. It could be
+			// possible that data is in the elf header and should be printed out,
+			// but I have no idea how to handle this at the moment.
+			if d.isElfHeader {
+				continue
+			}
+			fmt.Printf("0x%x", d.elfProg.Vaddr)
+			for _, b := range d.data {
+				fmt.Printf(" 0x%x|%d|%q", b, b, b)
+			}
+			fmt.Println()
 		}
-		fmt.Printf("0x%x", d.elfProg.Vaddr)
-		for _, b := range d.data {
-			fmt.Printf(" 0x%x|%d|%q", b, b, b)
+		for _, ir := range p.irSection.irs {
+			fmt.Printf("%v\n", ir)
 		}
 		fmt.Println()
+		fmt.Println()
 	}
-	for _, ir := range p.irSection.irs {
-		fmt.Printf("%v\n", ir)
-	}
-	fmt.Println()
-	fmt.Println()
-	state := programState{dataSections: p.dataSections}
-	for _, ir := range p.irSection.irs {
-		if state.exit {
-			break
-		}
-		switch ir.opCode.Inst {
-		case Syscall:
-			state.handleSyscall()
-		case Mov:
-			var data uint64
-			if ir.regSrc == RUnknown {
-				data = ir.imm
-			} else {
-				data = state.getRegister(ir.regSrc)
+	if runInstructions {
+		state := programState{dataSections: p.dataSections}
+		for _, ir := range p.irSection.irs {
+			if state.exit {
+				break
 			}
-			state.updateRegister(ir.regDst, data)
-		case Xor:
-			regDst := state.getRegister(ir.regDst)
-			regSrc := state.getRegister(ir.regSrc)
-			state.updateRegister(ir.regDst, regDst^regSrc)
+			switch ir.opCode.Inst {
+			case Syscall:
+				state.handleSyscall()
+			case Mov:
+				var data uint64
+				if ir.regSrc == RUnknown {
+					data = ir.imm
+				} else {
+					data = state.getRegister(ir.regSrc)
+				}
+				state.updateRegister(ir.regDst, data)
+			case Xor:
+				regDst := state.getRegister(ir.regDst)
+				regSrc := state.getRegister(ir.regSrc)
+				state.updateRegister(ir.regDst, regDst^regSrc)
+			}
 		}
+		fmt.Printf("\n\nexiting, code=%d\n", state.exitCode)
 	}
-	fmt.Printf("\n\nexiting, code=%d\n", state.exitCode)
 }
 
 type Section struct {
@@ -408,6 +441,27 @@ func main() {
 			isElfHeader = true
 		}
 		if prog.Type == elf.PT_LOAD && (prog.Flags&elf.PF_X == elf.PF_X) {
+
+			i := int(start)
+			for {
+				/*			ins, err := x86asm.Decode([]byte{0x48, 0x8b, 0x04, 0x25, 0xd8, 0x00, 0x60, 0x00, 0x48, 0x8b, 0x04, 0x25, 0xd8, 0x00, 0x60, 0x00}, 64)
+							fmt.Printf("%#v\n", ins)
+							fmt.Printf("%v\n", ins)
+							fmt.Println(err)
+							return
+				*/
+				if i >= len(buf) {
+					return
+				}
+				ins, err := x86asm.Decode(buf[i:], 64)
+				if err != nil {
+					fmt.Printf("error: %v\n", err)
+					return
+				}
+				fmt.Println(ins)
+				i += ins.Len
+			}
+
 			irs, err := parseExecProg(buf[int(start):], os.Stdout)
 			if err != nil {
 				log.Fatal(err)
@@ -476,9 +530,12 @@ func parseExecProg(data []byte, output io.Writer) ([]IR, error) {
 			d.handleImmToRegModRM(opCode)
 		case RegToReg:
 			d.handleRegToReg(opCode)
+		case DataToReg:
+			d.handleDataToReg(opCode)
 		default:
 			return nil, fmt.Errorf("unhandled opcode type: %d (0x%x)", d.Data[d.i], d.Data[d.i])
 		}
+		fmt.Printf("%v\n", d.irs[len(d.irs)-1])
 	}
 
 	return d.irs, nil
@@ -519,6 +576,21 @@ func (d *Decoder) handleRegToReg(o OpCode) {
 		regDst:        regDst,
 		indexPosition: d.startI,
 	})
+}
+
+func (d *Decoder) handleDataToReg(o OpCode) {
+	regDstByte := d.modrm.Reg
+	regDst := d.getReg(regDstByte, d.rex.R)
+	// TODO: wtf is this?
+	d.i++
+	d.irs = append(d.irs, IR{
+		opCode:        o,
+		regDst:        regDst,
+		dataIndex:     d.binaryFromBytes(d.Data[d.i : d.i+o.Size]),
+		indexPosition: d.startI,
+	})
+	// fmt.Printf("IR=%#v\n", d.irs[len(d.irs)-1])
+	d.i += o.Size
 }
 
 func (d *Decoder) formatBytes(b []byte) []byte {

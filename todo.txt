@@ -1,5 +1,8 @@
 - be able to move from a memory location
 - fix tests
+- be able to handle stack
+- be able to handle writing to heap
+- add tests
 - add mnemonic handling for ADD, INC, DEC
 - add other syscalls? Only SYS_WRITE and SYS_EXIT handled currently
 - SYS_WRITE: should also use stderr
